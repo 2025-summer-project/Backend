@@ -1,15 +1,19 @@
 pipeline {
-    agent any  // 어떤 에이전트에서든 실행
+    agent any
 
     environment {
-        // 필요한 경우 가상환경 경로 또는 환경변수 설정
         VENV = "${WORKSPACE}/venv"
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/2025-summer-project/Backend.git'
+                checkout([$class: 'GitSCM',
+                    branches: [[name: '*/main']],
+                    userRemoteConfigs: [[
+                        url: 'https://github.com/2025-summer-project/Backend.git'
+                    ]]
+                ])
             }
         }
 
@@ -42,7 +46,7 @@ pipeline {
             }
         }
 
-        // 필요하다면 아래처럼 배포 스테이지도 추가 가능
+        // 배포는 필요하면 열어줘!
         // stage('Deploy') {
         //     steps {
         //         sh './deploy.sh'
