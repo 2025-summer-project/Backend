@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/your-org/your-django-project.git'
+                git 'https://github.com/2025-summer-project/Backend.git'
             }
         }
 
