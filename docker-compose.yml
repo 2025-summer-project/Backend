@@ -12,17 +12,12 @@ services:
       - "3306:3306"
     volumes:
       - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   backend:
     build:
       context: .
     container_name: simple-backend
-    command: python manage.py runserver 0.0.0.0:8000
+    command: ["./wait-for-it.sh", "db", "3306", "--", "python", "manage.py", "runserver", "0.0.0.0:8000"]
     volumes:
       - .:/app
     ports:
