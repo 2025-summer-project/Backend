@@ -7,9 +7,9 @@ from drf_yasg import openapi
 
 schema_view = get_schema_view(
    openapi.Info(
-      title="Test API",
+      title="API Documentation",
       default_version='v1',
-      description="개발용 Swagger 문서",
+      description="API description",
    ),
    public=True,
    permission_classes=[permissions.AllowAny],
@@ -18,7 +18,6 @@ schema_view = get_schema_view(
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('test/', include('test.urls')),
-
+    path('test/', include('test.urls')),   # test용 API
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
 ]
