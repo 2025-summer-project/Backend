@@ -1,6 +1,6 @@
 from django.urls import path
-from .views import test_api
+from .views import HelloWorldView
 
 urlpatterns = [
-    path('', test_api),
+    path('hello/', HelloWorldView.as_view(), name='hello-world'),
 ]

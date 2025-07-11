@@ -1,4 +1,8 @@
-from django.http import JsonResponse
+from django.http import HttpResponse
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
-def test_api(request):
-    return JsonResponse({'message': '테스트 API 응답'})
+class HelloWorldView(APIView):
+    def get(self, request):
+        return Response({"message": "Hello, World!"}, status=status.HTTP_200_OK)
