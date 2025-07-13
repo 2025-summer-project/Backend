@@ -70,21 +70,5 @@ pipeline {
                  https://discord.com/api/webhooks/1392458187940298803/y3iurVacjDbVYc8LUZNCTjU0oSDVKTGagQwT5em2iGoj1sJ7vvuKL5I469zeZbfhLHqS
             """
         }
-        failure {
-            sh """
-            curl -H "Content-Type: application/json" \\
-                 -X POST \\
-                 -d '{
-                     "username": "Jenkins CI",
-                     "avatar_url": "https://www.jenkins.io/images/logos/jenkins/jenkins.png",
-                     "embeds": [{
-                         "title": "❌ Backend 빌드 실패!",
-                         "description": "**Job:** #${env.BUILD_NUMBER}\\n🔗 [Jenkins에서 보기](${env.BUILD_URL})",
-                         "color": 16711680
-                     }]
-                 }' \
-                 https://discord.com/api/webhooks/1392458187940298803/y3iurVacjDbVYc8LUZNCTjU0oSDVKTGagQwT5em2iGoj1sJ7vvuKL5I469zeZbfhLHqS
-            """
-        }
     }
 }
