@@ -31,9 +31,10 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'test',
     'drf_yasg',
-    'rest_framework',
+    'rest_framework', 
     'core', #공용 모델
-    'accounts' #유저 관리
+    'accounts', #유저 관리'
+    'upload', # 업로드 기능
 ]
 
 MIDDLEWARE = [
@@ -125,6 +126,10 @@ STATIC_URL = 'static/'
 # STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# 업로드된 문서를 저장하는 디렉터리
+MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_URL = '/media/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
