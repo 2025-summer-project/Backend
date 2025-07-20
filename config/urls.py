@@ -21,4 +21,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('test/', include('test.urls')),   # test용 API888888
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('auth/', include('accounts.urls')),  # /auth/signup 요청은 accounts 앱으로 전달
 ]
