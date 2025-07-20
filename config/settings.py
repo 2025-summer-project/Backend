@@ -31,7 +31,9 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'test',
     'drf_yasg',
-    'rest_framework', 
+    'rest_framework',
+    'core', #공용 모델
+    'accounts' #유저 관리
 ]
 
 MIDDLEWARE = [
@@ -76,6 +78,10 @@ DATABASES = {
         'PASSWORD': os.getenv('DATABASE_PASSWORD'),
         'HOST': os.getenv('DATABASE_HOST'),
         'PORT': '3306',
+        'OPTIONS': {
+            'charset': 'utf8mb4',  # ✅ 클라이언트 접속 문자셋 설정
+            'init_command': "SET NAMES 'utf8mb4'"  # ✅ 강제 지정
+        }
     }
 }
 
