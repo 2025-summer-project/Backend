@@ -130,3 +130,20 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+}
+
+# JWT 설정 (선택, 기본 유지 가능)
+from datetime import timedelta
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),   # 엑세스 토큰 유효시간
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),      # 리프레시 토큰 유효시간
+    'AUTH_HEADER_TYPES': ('Bearer',),                 # Authorization 헤더 타입
+}
+
+AUTH_USER_MODEL = 'core.User'   # 앱이름.모델이름
