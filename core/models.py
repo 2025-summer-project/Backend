@@ -1,5 +1,5 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 
 
 # 사용자 생성 시 필요한 함수 정의
@@ -18,14 +18,16 @@ class UserManager(BaseUserManager):
 
 
 # 사용자 모델
-class User(AbstractBaseUser):
+class User(AbstractBaseUser, PermissionsMixin):
     user_id = models.CharField(max_length=20, unique=True)   # 로그인용 ID
     user_name = models.CharField(max_length=20)              # 사용자 이름
     password = models.CharField(max_length=128)              # 해시 저장
-
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)     # 생성일
 
     USERNAME_FIELD = 'user_id'            # 로그인 ID 필드
+    REQUIRED_FIELDS = ['user_name']
 
     objects = UserManager()               # 사용자 매니저 지정
 
