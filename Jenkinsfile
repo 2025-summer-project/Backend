@@ -3,6 +3,10 @@ pipeline {
 
     environment {
         VENV = "${WORKSPACE}/venv"
+        DATABASE_NAME = "my_db"
+        DATABASE_USER = "my_user"
+        DATABASE_PASSWORD = "my_pass"
+        DATABASE_HOST = "127.0.0.1"
     }
 
     stages {
