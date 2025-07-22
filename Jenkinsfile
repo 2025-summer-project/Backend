@@ -20,8 +20,8 @@ pipeline {
         stage('Install System Packages') {
             steps {
                 sh '''
-                    sudo apt-get update
-                    sudo apt-get install -y pkg-config default-libmysqlclient-dev libmysqlclient-dev gcc python3-dev
+                    apt-get update
+                    apt-get install -y pkg-config default-libmysqlclient-dev libmysqlclient-dev gcc python3-dev
                 '''
             }
         }
