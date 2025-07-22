@@ -21,7 +21,7 @@ pipeline {
             steps {
                 sh '''
                     apt-get update
-                    apt-get install -y pkg-config default-libmysqlclient-dev libmysqlclient-dev gcc python3-dev
+                    apt-get install -y pkg-config libmariadb-dev libmariadb-dev-compat gcc python3-dev
                 '''
             }
         }
