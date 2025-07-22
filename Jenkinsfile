@@ -17,12 +17,30 @@ pipeline {
             }
         }
 
+       stage('Load .env from Jenkins') {
+            steps {
+                configFileProvider([configFile(fileId: 'my_backend_env', targetLocation: '.env')]) {
+                echo ".env 파일을 Jenkins에서 로드했어요 💚"
+            }
+        }
+    }
+
+
+        stage('Install System Packages') {
+            steps {
+                sh '''
+                    apt-get update
+                    apt-get install -y pkg-config libmariadb-dev libmariadb-dev-compat gcc python3-dev
+                '''
+            }
+        }
+
         stage('Setup Python & Dependencies') {
             steps {
                 sh '''
                     python3 -m venv venv
                     . venv/bin/activate
-                    pip install --upgrade pip
+                    pip install --upgrade pip setuptools wheel
                     pip install -r requirements.txt
                 '''
             }
@@ -45,12 +63,6 @@ pipeline {
                 '''
             }
         }
-
-        // stage('Deploy') {
-        //     steps {
-        //         sh './deploy.sh'
-        //     }
-        // }
     }
 
     post {
