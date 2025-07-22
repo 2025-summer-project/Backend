@@ -17,12 +17,21 @@ pipeline {
             }
         }
 
+        stage('Install System Packages') {
+            steps {
+                sh '''
+                    sudo apt-get update
+                    sudo apt-get install -y pkg-config default-libmysqlclient-dev libmysqlclient-dev gcc python3-dev
+                '''
+            }
+        }
+
         stage('Setup Python & Dependencies') {
             steps {
                 sh '''
                     python3 -m venv venv
                     . venv/bin/activate
-                    pip install --upgrade pip
+                    pip install --upgrade pip setuptools wheel
                     pip install -r requirements.txt
                 '''
             }
