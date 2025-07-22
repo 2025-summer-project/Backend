@@ -3,10 +3,6 @@ pipeline {
 
     environment {
         VENV = "${WORKSPACE}/venv"
-        DATABASE_NAME = "my_db"
-        DATABASE_USER = "my_user"
-        DATABASE_PASSWORD = "my_pass"
-        DATABASE_HOST = "127.0.0.1"
     }
 
     stages {
@@ -20,6 +16,15 @@ pipeline {
                 ])
             }
         }
+
+       stage('Load .env from Jenkins') {
+            steps {
+                configFileProvider([configFile(fileId: 'my_backend_env', targetLocation: '.env')]) {
+                echo ".env 파일을 Jenkins에서 로드했어요 💚"
+            }
+        }
+    }
+
 
         stage('Install System Packages') {
             steps {
@@ -58,12 +63,6 @@ pipeline {
                 '''
             }
         }
-
-        // stage('Deploy') {
-        //     steps {
-        //         sh './deploy.sh'
-        //     }
-        // }
     }
 
     post {
