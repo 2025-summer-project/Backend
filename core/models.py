@@ -1,4 +1,5 @@
 from django.db import models
+from django.utils import timezone
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 
 
@@ -67,3 +68,31 @@ class ChatLog(models.Model):
 
     def __str__(self):
         return f"{self.sender}: {self.message[:30]}"
+    
+
+class RefreshTokenStore(models.Model): # 어떤 유저의 토큰인지 연결 (1:N 관계)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,  # 유저가 삭제되면 해당 토큰도 자동 삭제됨
+        related_name="refresh_tokens"
+    )
+
+    token = models.CharField(max_length=512, unique=True) # 저장된 refresh token 문자열 (JWT 토큰 전체를 저장)
+    created_at = models.DateTimeField(auto_now_add=True) # 토큰이 발급된 시각
+    expires_at = models.DateTimeField() # 토큰이 만료되는 시각 (JWT의 exp 클레임과 동일하게 설정)
+    revoked = models.BooleanField(default=False,) # 로그아웃 또는 강제 만료 처리된 경우 표시
+
+    class Meta:
+        # 최근에 발급된 순으로 정렬
+        ordering = ['-created_at']
+        verbose_name = "Refresh Token 저장소"
+        verbose_name_plural = "Refresh Token 저장소 목록"
+
+    def is_expired(self):
+        """
+        현재 시간이 만료시간을 지난 경우 True 반환
+        """
+        return timezone.now() >= self.expires_at
+
+    def __str__(self):
+        return f"[{self.user.user_id}] refresh @ {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
