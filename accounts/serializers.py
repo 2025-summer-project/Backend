@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from core.models import User  # core.models에서 User 모델을 가져옴
+from django.utils import timezone
+from datetime import datetime, timedelta
+from core.models import User, RefreshTokenStore  # core.models에서 User 모델을 가져옴
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 # 사용자 회원가입에 사용할 시리얼라이저
@@ -47,6 +49,17 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         attrs['username'] = attrs.get('user_id') # user_id → username 필드로 변환해서 부모 클래스가 인식
         data = super().validate(attrs)  # 기본 access/refresh 생성
+
+        refresh = self.get_token(self.user)
+
+        # ✅ DB에 RefreshToken 저장
+        RefreshTokenStore.objects.create(
+            user=self.user,
+            token=str(refresh),
+            created_at=timezone.now(),
+            expires_at=timezone.now() + timedelta(days=7)  # JWT exp와 맞추기
+        )
+
 
         # 응답에 추가로 user_id와 user_name 포함
         data.update({
