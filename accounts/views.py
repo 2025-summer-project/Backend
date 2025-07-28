@@ -19,10 +19,11 @@ from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
 from django.utils.decorators import method_decorator
 
-# 회원가입 요청을 처리하는 API 뷰
+# 회원가입 요청 처리
 class SignupView(APIView):
      #Swagger가 인식할 수 있게 데코레이터 사용
     @swagger_auto_schema(
+        operation_summary="회원가입",
         request_body=UserSerializer,  #이게 있어야 Swagger 입력창이 뜬다
         responses={201: openapi.Response('회원가입 완료')}
     )
@@ -36,6 +37,47 @@ class SignupView(APIView):
         else:
             print("유효성 실패:", serializer.errors)  # 실패 시 오류 로그 확인
             return Response(serializer.errors, status=400)
+        
+# 아이디 중복 확인
+class IDCheckView(APIView):
+    @swagger_auto_schema(
+        operation_summary="아이디 중복 확인",
+        manual_parameters=[
+            openapi.Parameter(
+                'user_id',
+                openapi.IN_QUERY,
+                description="중복 확인할 아이디",
+                type=openapi.TYPE_STRING,
+                required=True
+            )
+        ],
+        responses={
+            200: openapi.Response(
+                description="중복 여부",
+                examples={
+                    "application/json": {
+                        "available": True,
+                        "message": "사용 가능한 아이디입니다."
+                    }
+                }
+            )
+        }
+    )
+    def get(self, request):
+        user_id = request.GET.get('user_id')
+        if not user_id:
+            return Response({"message": "user_id 파라미터가 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if User.objects.filter(user_id=user_id).exists():
+            return Response({
+                "available": False,
+                "message": "이미 사용 중인 아이디입니다."
+            }, status=status.HTTP_200_OK)
+        else:
+            return Response({
+                "available": True,
+                "message": "사용 가능한 아이디입니다."
+            }, status=status.HTTP_200_OK)
         
 # 로그인 요청 처리
 class LoginView(TokenObtainPairView):
