@@ -9,3 +9,4 @@ drf-yasg==1.21.7
 djangorestframework-simplejwt
 pdfplumber
 openai>=1.0.0
+requests
