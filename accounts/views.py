@@ -7,6 +7,13 @@ from rest_framework_simplejwt.views import TokenObtainPairView
 from .serializers import CustomTokenObtainPairSerializer
 from accounts.serializers import UserSerializer  # 시리얼라이저 불러오기
 
+# 템플릿용
+import requests
+from django.shortcuts import render, redirect
+from django.views import View
+from django.contrib import messages
+from core.models import User
+
 # Swagger용 데코레이터 추가
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
@@ -54,9 +61,11 @@ class LoginView(TokenObtainPairView):
             401: openapi.Response(description="로그인 실패 (비밀번호 틀림, 사용자 없음 등)"),
         }
     )
+
     def post(self, request, *args, **kwargs):
         return super().post(request, *args, **kwargs)
-    
+
+
 # 로그아웃 요청 처리   
 class LogoutView(APIView):
 
@@ -87,3 +96,62 @@ class LogoutView(APIView):
             return Response({"detail": "로그아웃 성공"}, status=200)
         else:
            return Response({"detail": "해당 토큰이 존재하지 않거나 이미 삭제됨"}, status=400)
+
+    #=================템플릿=================== 
+
+# 회원가입 템플릿
+class SignupFormView(View):
+    def get(self, request):
+        return render(request, "accounts/signup.html")
+
+    def post(self, request):
+        user_id = request.POST.get("user_id")
+        user_name = request.POST.get("user_name")
+        password = request.POST.get("password")
+
+        if User.objects.filter(user_id=user_id).exists():
+            return render(request, "accounts/signup.html", {"error": "이미 존재하는 아이디입니다."})
+
+        user = User(user_id=user_id, user_name=user_name)
+        user.set_password(password)
+        user.save()
+
+        return redirect("/auth/login-page")  # 가입 후 로그인 페이지로
+    
+
+# 로그인 템플릿
+class LoginFormView(View):
+
+    def get(self, request):
+        return render(request, 'accounts/login.html')
+
+    def post(self, request):
+        user_id = request.POST.get('user_id')
+        password = request.POST.get('password')
+
+        # 내부 API 호출
+        response = requests.post('http://localhost:8000/auth/login', json={
+            'user_id': user_id,
+            'password': password
+        })
+
+        if response.status_code == 200:
+            data = response.json()
+            access = data.get('access')
+            refresh = data.get('refresh')
+            messages.success(request, f'로그인 성공! Access Token: {access[:20]}...')
+            return redirect('/auth/login')
+        else:
+            messages.error(request, '로그인 실패!')
+            return redirect('/auth/login')
+    
+# 로그아웃 템플릿
+class LogoutFormView(View):
+    def get(self, request):
+        return render(request, "accounts/logout.html")
+
+    def post(self, request):
+        refresh_token = request.POST.get("refresh")
+
+        RefreshTokenStore.objects.filter(token=refresh_token).delete()
+        return redirect("/auth/login-page")

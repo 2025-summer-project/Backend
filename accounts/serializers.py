@@ -52,7 +52,9 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 
         refresh = self.get_token(self.user)
 
-        # ✅ DB에 RefreshToken 저장
+        RefreshTokenStore.objects.filter(user=self.user).delete() # 기존 RefreshToken 제거
+
+        # DB에 새로운 RefreshToken 저장
         RefreshTokenStore.objects.create(
             user=self.user,
             token=str(refresh),
