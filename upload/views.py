@@ -5,7 +5,6 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from core.models import Document
-from core.models import User
 import pdfplumber
 from openai import OpenAI
 from django.conf import settings
@@ -45,7 +44,7 @@ def summarize_text_with_openai(text):
 
 # PDF 문서 업로드 기능
 class DocumentUploadView(APIView):
-    # permission_classes = [IsAuthenticated]  # 장고에서 제공하는 권한 클래스
+    permission_classes = [IsAuthenticated]  # 장고에서 제공하는 권한 클래스
     parser_classes = [MultiPartParser]  # 파일 데이터를 안전하게 읽도록 도와주는 역할 
 
     @swagger_auto_schema(
@@ -62,8 +61,7 @@ class DocumentUploadView(APIView):
 
     # 클라이언트가 보낸 파일 받아오기
     def post(self, request):
-        user = User.objects.get(id=1)
-        # user = request.user
+        user = request.user
         file = request.FILES.get('file')
 
         if not file:
