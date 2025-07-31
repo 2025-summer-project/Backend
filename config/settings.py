@@ -148,8 +148,22 @@ from datetime import timedelta
 
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),   # 엑세스 토큰 유효시간
-    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),      # 리프레시 토큰 유효시간
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),      # 리프레시 토큰 유효시간
     'AUTH_HEADER_TYPES': ('Bearer',),                 # Authorization 헤더 타입
 }
 
 AUTH_USER_MODEL = 'core.User'   # 앱이름.모델이름
+
+
+#test
+SWAGGER_SETTINGS = {
+    'SECURITY_DEFINITIONS': {
+        'Bearer': {
+            'type': 'apiKey',
+            'name': 'Authorization',  # 이게 실제로 헤더에 들어가는 이름
+            'in': 'header',
+            'description': 'JWT 인증을 위한 토큰을 입력하세요. 예: **Bearer &lt;your_access_token&gt;**',
+        }
+    },
+    'USE_SESSION_AUTH': False,  # 세션 인증 비활성화 (JWT만 쓸 경우)
+}

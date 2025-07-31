@@ -23,4 +23,5 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('auth/', include('accounts.urls')),  # /auth/signup 요청은 accounts 앱으로 전달
     path('upload/', include('upload.urls')),
+    path('document/', include('documents.urls')),
 ]
