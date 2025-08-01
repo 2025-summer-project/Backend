@@ -22,5 +22,8 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY wait-for-it.sh /wait-for-it.sh
 RUN chmod +x /wait-for-it.sh
 
+# 폰트 적용
+COPY fonts/NanumGothic*.ttf /app/fonts/
+
 # 전체 프로젝트 복사
 COPY . .
