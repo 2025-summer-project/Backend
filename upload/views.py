@@ -9,6 +9,7 @@ from core.models import User
 import pdfplumber
 from openai import OpenAI
 from django.conf import settings
+import os
 
 # PDF 텍스트 추출 함수
 def extract_text_from_pdf(file):
@@ -76,13 +77,15 @@ class DocumentUploadView(APIView):
         extracted_text = extract_text_from_pdf(file)
         summary_text = summarize_text_with_openai(extracted_text[:3000])
 
+        file_name_only, _ = os.path.splitext(file.name)
+
         document = Document.objects.create(
             user=user,
             file=file,  # /media/documents 디렉터리에 저장됨 
-            file_name=file.name,
+            file_name=file_name_only,
             extracted_text=extracted_text,
             summary_text=summary_text,
-            chat_name=''
+            chat_name=file_name_only,
         )
 
         return Response({'message': '업로드 성공', 'document_id': document.id})
