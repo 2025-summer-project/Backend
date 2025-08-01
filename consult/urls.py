@@ -4,4 +4,6 @@ from .import views
 
 urlpatterns = [
     path('chat/', views.ChatCreateView.as_view(), name='consult'),
+    path('<int:document_id>/chat/', views.ChatHistoryView.as_view(), name='chat-history'),
+    path('<int:document_id>/summary/', views.ContractSummaryView.as_view(), name='contract-summary')
 ]

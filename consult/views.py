@@ -8,6 +8,7 @@ from core.models import ChatLog, Document
 from openai import OpenAI
 from django.conf import settings
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
+from django.utils import timezone
 
 # Swagger 스키마 정의
 chat_request_schema = openapi.Schema(
@@ -114,3 +115,42 @@ class ChatCreateView(APIView):
             "user_message": {"id": user_message.id, "message": message},
             "ai_message": {"id": ai_message.id, "message": ai_answer}
         }, status=status.HTTP_200_OK)
+    
+# 문서별 채팅 조회
+class ChatHistoryView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="문서별 대화 히스토리 조회",
+        responses={
+            200: openapi.Response(
+                description="대화 히스토리",
+                examples={
+                    "application/json": {
+                        "document_id": 1,
+                        "chats": [
+                            {"id": 1, "sender": "user", "message": "안녕하세요"},
+                            {"id": 2, "sender": "ai", "message": "안녕하세요! 무엇을 도와드릴까요?"}
+                        ]
+                    }
+                }
+            ),
+            401: openapi.Response(description="인증 실패 또는 토큰 만료"),
+            404: openapi.Response(description="문서 없음")
+        }
+    )
+    def get(self, request, document_id):
+        try:
+            document = Document.objects.get(id=document_id, user=request.user)
+        except Document.DoesNotExist:
+            return Response({"error": "해당 문서를 찾을 수 없습니다."}, status=404)
+
+        chats = ChatLog.objects.filter(document=document).order_by("id")
+        chat_list = [{"id": c.id, "sender": c.sender, "message": c.message, "created_at": timezone.localtime(c.created_at).isoformat()} for c in chats]
+
+        return Response({
+            "document_id": document.id,
+            "chats": chat_list,
+        }, status=200)
+    
+# 요약본 PDF 조회
