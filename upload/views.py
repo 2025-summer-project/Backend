@@ -5,10 +5,11 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from core.models import Document
-from core.models import User
 import pdfplumber
 from openai import OpenAI
 from django.conf import settings
+from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
+from rest_framework import status
 
 # PDF 텍스트 추출 함수
 def extract_text_from_pdf(file):
@@ -28,7 +29,7 @@ def summarize_text_with_openai(text):
         response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": "당신은 변호사입니다."},
+                {"role": "system", "content": "You are a helpful AI assistant specialized in legal contract review. 모든 답변은 한국어로 제공하세요."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.5,
@@ -36,20 +37,28 @@ def summarize_text_with_openai(text):
         )
 
         result = response.choices[0].message.content.strip()
-        print("✅ OpenAI 요약 성공:", result[:100])
+        print("OpenAI 요약 성공:", result[:100])
         return result
 
     except Exception as e:
-        print(f"❌ OpenAI 요약 실패: {e}")
+        print(f"OpenAI 요약 실패: {e}")
         return ""
 
 # PDF 문서 업로드 기능
 class DocumentUploadView(APIView):
-    # permission_classes = [IsAuthenticated]  # 장고에서 제공하는 권한 클래스
+    permission_classes = [IsAuthenticated]  # 장고에서 제공하는 권한 클래스
     parser_classes = [MultiPartParser]  # 파일 데이터를 안전하게 읽도록 도와주는 역할 
 
+    def handle_exception(self, exc):
+        if isinstance(exc, (AuthenticationFailed, NotAuthenticated)):
+            return Response(
+                {"detail": "액세스 토큰이 만료되었거나 유효하지 않습니다."},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        return super().handle_exception(exc)
+
     @swagger_auto_schema(
-        operation_summary="PDF 문서 업로드 API",
+        operation_summary="PDF 문서 업로드",
         manual_parameters=[
             openapi.Parameter(
                 'file', openapi.IN_FORM,  # form-data에 들어가는 값
@@ -57,13 +66,17 @@ class DocumentUploadView(APIView):
                 type=openapi.TYPE_FILE,
                 required=True
             ),
-        ]
+        ],
+        responses={
+            200: openapi.Response('업로드 성공'),
+            400: openapi.Response('요청 오류'),
+            401: openapi.Response('액세스 토큰 만료 또는 유효하지 않음'),
+        }
     )
 
     # 클라이언트가 보낸 파일 받아오기
     def post(self, request):
-        user = User.objects.get(id=1)
-        # user = request.user
+        user = request.user
         file = request.FILES.get('file')
 
         if not file:
@@ -85,7 +98,7 @@ class DocumentUploadView(APIView):
             chat_name=''
         )
 
-        return Response({'message': '업로드 성공', 'document_id': document.id})
+        return Response({'message': '업로드 성공', 'document_id': document.id}, status=200)
     
 GUIDELINE_PROMPT = """
 당신은 **근로 계약** 전문 변호사입니다. 
