@@ -11,6 +11,14 @@ from django.conf import settings
 import os
 from rest_framework.exceptions import AuthenticationFailed, NotAuthenticated
 from rest_framework import status
+import json
+from django.core.files.base import ContentFile
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+import io
 
 # PDF 텍스트 추출 함수
 def extract_text_from_pdf(file):
@@ -28,22 +36,33 @@ def summarize_text_with_openai(text):
         prompt = GUIDELINE_PROMPT.replace("{{context}}", "").replace("{{user_question}}", text)
 
         response = client.chat.completions.create(
-            model="gpt-3.5-turbo",
+            model="gpt-4o",
             messages=[
                 {"role": "system", "content": "You are a helpful AI assistant specialized in legal contract review. 모든 답변은 한국어로 제공하세요."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.5,
-            max_tokens=1500,
+            max_tokens=2500,
         )
 
         result = response.choices[0].message.content.strip()
-        print("OpenAI 요약 성공:", result[:100])
+        result = result.replace("```json", "").replace("```", "").strip()  # 백틱 제거
+        print("✅ GPT 원본 응답:", repr(result[:1000]))
         return result
 
     except Exception as e:
         print(f"OpenAI 요약 실패: {e}")
         return ""
+
+# 요약 결과가 JSON 형식인지 확인하는 함수
+def validate_summary_json(json_text):
+    try:
+        parsed = json.loads(json_text)  # 문자열을 JSON으로 파싱
+        if not isinstance(parsed, list):  # 리스트 형식이 아닌 경우 예외 발생
+            raise ValueError("요약 데이터는 리스트가 아닙니다.")
+        return True  # 유효한 JSON
+    except json.JSONDecodeError:
+        return False  # 파싱 실패
 
 # PDF 문서 업로드 기능
 class DocumentUploadView(APIView):
@@ -90,14 +109,49 @@ class DocumentUploadView(APIView):
         extracted_text = extract_text_from_pdf(file)
         summary_text = summarize_text_with_openai(extracted_text[:3000])
 
+        # 요약 결과가 유효한 JSON인지 검사
+        if not validate_summary_json(summary_text):
+            return Response({'error': 'OpenAI 요약 결과가 유효한 JSON 형식이 아닙니다.'}, status=400)
+
         file_name_only, _ = os.path.splitext(file.name)
 
+        # Register fonts
+        pdfmetrics.registerFont(TTFont('NanumGothic', 'fonts/NanumGothic-Regular.ttf'))
+        pdfmetrics.registerFont(TTFont('NanumGothic-Bold', 'fonts/NanumGothic-Bold.ttf'))
+        pdfmetrics.registerFont(TTFont('NanumGothic-ExtraBold', 'fonts/NanumGothic-ExtraBold.ttf'))
+
+        # Create PDF from summary JSON
+        summary_data = json.loads(summary_text)
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=A4)
+        styles = getSampleStyleSheet()
+        styles.add(ParagraphStyle(name='CustomTitle', parent=styles['Normal'], fontName='NanumGothic-Bold', fontSize=14, spaceAfter=10))
+        styles.add(ParagraphStyle(name='CustomContent', parent=styles['Normal'], fontName='NanumGothic', fontSize=11, spaceAfter=8))
+
+        elements = []
+        for idx, item in enumerate(summary_data, 1):
+            elements.append(Paragraph(f"[{idx}] 조항 요약", styles["CustomTitle"]))
+            elements.append(Paragraph(f"원문: {item.get('sentence', '')}", styles["CustomContent"]))
+            elements.append(Paragraph(f"관련 법령: {item.get('law', '-')}", styles["CustomContent"]))
+            elements.append(Paragraph(f"해설: {item.get('description', '-')}", styles["CustomContent"]))
+            elements.append(Paragraph(f"개선안: {item.get('recommend', '-')}", styles["CustomContent"]))
+            elements.append(Spacer(1, 12))
+
+        doc.build(elements)
+        buffer.seek(0)
+
+        # Save summary PDF file in memory
+        summary_file_name = f"{file_name_only}_summary.pdf"
+        summary_content = ContentFile(buffer.read(), name=summary_file_name)
+
+        # 원본 계약서 PDF 저장
+        # 요약본 PDF 저장 (AI 분석 결과)
         document = Document.objects.create(
             user=user,
-            file=file,  # /media/documents 디렉터리에 저장됨 
+            file=file,  # 원본 계약서 PDF 저장
+            summary_file=summary_content,  # 요약본 PDF 저장
             file_name=file_name_only,
             extracted_text=extracted_text,
-            summary_text=summary_text,
             chat_name=file_name_only,
         )
 
@@ -128,7 +182,9 @@ GUIDELINE_PROMPT = """
 - **description**: "law"의 법률 데이터와 계약서 내용의 차이점을 설명합니다.
 - **recommend**: "law"와 "description"에 따라 수정이 완료된 수정 조항입니다.
 
-답안은 [] 내부에 작성되어야 하며, JSON만 제공합니다.
+답변은 반드시 JSON 형식의 리스트([])로 출력하고, 그 외 불필요한 말이나 설명은 절대 포함하지 마십시오. 
+JSON 형식이 완전히 닫혀야 하며, 누락된 괄호나 따옴표 없이 유효한 형식으로 출력하십시오.
+백틱(```)이나 코드 블록(```json`, `json`, triple backticks 등)을 절대 포함하지 마십시오. 응답은 오직 JSON 배열만 출력하십시오.
 
 ## 질문
 1. 이 계약서의 주요 조항은 모두 무엇입니까? 주요 조항을 찾고 'main' 타입으로 분류하여, 각 조항이 중요한 이유를 설명하십시오.

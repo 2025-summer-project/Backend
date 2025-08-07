@@ -45,7 +45,7 @@ class Document(models.Model):
     chat_name = models.CharField(max_length=255)                 # 채팅방 이름
 
     extracted_text = models.TextField()                          # 추출된 원문 텍스트
-    summary_text = models.TextField()                            # 요약된 텍스트
+    summary_file = models.FileField(upload_to='summaries/', blank=True, null=True)                        # 요약된 파일
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(null=True, blank=True)

@@ -10,3 +10,5 @@ djangorestframework-simplejwt
 pdfplumber
 openai>=1.0.0
 requests
+reportlab>=4.0.0
+django-mysql
