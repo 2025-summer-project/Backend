@@ -15,10 +15,12 @@ import json
 from django.core.files.base import ContentFile
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib import colors
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 import io
+from datetime import datetime
 
 # PDF 텍스트 추출 함수
 def extract_text_from_pdf(file):
@@ -63,6 +65,54 @@ def validate_summary_json(json_text):
         return True  # 유효한 JSON
     except json.JSONDecodeError:
         return False  # 파싱 실패
+
+# 요약 JSON을 PDF 템플릿용 컨텍스트로 변환
+from collections import Counter
+
+def build_summary_context(items):
+    # items: 모델이 반환한 JSON 배열(list of dict)
+    # 통계 집계
+    total = len(items)
+    type_counts = Counter()
+    risk_counts = Counter()
+    clauses = []
+
+    for it in items:
+        types = it.get("types", []) or []
+        for t in types:
+            type_counts[t] += 1
+        risk = (it.get("risk") or "low").lower()
+        if risk not in ("low", "mid", "high"):
+            risk = "low"
+        risk_counts[risk] += 1
+
+        clauses.append({
+            "title": it.get("title") or it.get("category") or "조항",
+            "risk": risk,
+            "original": it.get("sentence", ""),
+            "law": it.get("law", "-"),
+            "commentary": it.get("description", "-"),
+            "recommendation": it.get("recommend", "-"),
+            "types": types,
+        })
+
+    # 하이라이트: 독소+High 우선, 부족하면 Mid 보충 (최대 5)
+    highlights = [f"[{c['title']}] {c['commentary']}" for c in clauses if ("toxin" in c["types"]) and c["risk"] == "high"]
+    if len(highlights) < 5:
+        highlights += [f"[{c['title']}] {c['commentary']}" for c in clauses if ("toxin" in c["types"]) and c["risk"] == "mid"]
+    highlights = highlights[:5]
+
+    stats = {
+        "total": total,
+        "main": type_counts.get("main", 0),
+        "toxin": type_counts.get("toxin", 0),
+        "ambi": type_counts.get("ambi", 0),
+        "risk_high": risk_counts.get("high", 0),
+        "risk_mid": risk_counts.get("mid", 0),
+        "risk_low": risk_counts.get("low", 0),
+    }
+
+    return stats, highlights, clauses
 
 # PDF 문서 업로드 기능
 class DocumentUploadView(APIView):
@@ -113,7 +163,9 @@ class DocumentUploadView(APIView):
         if not validate_summary_json(summary_text):
             return Response({'error': 'OpenAI 요약 결과가 유효한 JSON 형식이 아닙니다.'}, status=400)
 
-        file_name_only, _ = os.path.splitext(file.name)
+        timestamp = datetime.now().strftime("%Y.%m.%d_%H:%M")
+        filename,  = os.path.splitext(file.name)
+        file_name_only = f"{filename}{timestamp}"
 
         # Register fonts
         pdfmetrics.registerFont(TTFont('NanumGothic', 'fonts/NanumGothic-Regular.ttf'))
@@ -122,26 +174,78 @@ class DocumentUploadView(APIView):
 
         # Create PDF from summary JSON
         summary_data = json.loads(summary_text)
+        highlights, clauses = build_summary_context(summary_data)
+
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
         styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='CustomTitle', parent=styles['Normal'], fontName='NanumGothic-Bold', fontSize=14, spaceAfter=10))
-        styles.add(ParagraphStyle(name='CustomContent', parent=styles['Normal'], fontName='NanumGothic', fontSize=11, spaceAfter=8))
+        styles.add(ParagraphStyle(name='H1', parent=styles['Normal'], fontName='NanumGothic-ExtraBold', fontSize=18, spaceAfter=12))
+        styles.add(ParagraphStyle(name='H2', parent=styles['Normal'], fontName='NanumGothic-Bold', fontSize=14, spaceBefore=6, spaceAfter=6))
+        styles.add(ParagraphStyle(name='Label', parent=styles['Normal'], fontName='NanumGothic-Bold', fontSize=11, textColor=colors.HexColor('#374151'), spaceBefore=4, spaceAfter=2))
+        styles.add(ParagraphStyle(name='Body', parent=styles['Normal'], fontName='NanumGothic', fontSize=11, leading=16))
+        styles.add(ParagraphStyle(name='Quote', parent=styles['Normal'], fontName='NanumGothic', fontSize=10.5, backColor=colors.HexColor('#F9FAFB'), borderWidth=1, borderColor=colors.HexColor('#E5E7EB'), borderPadding=6, leading=15))
+
+        def risk_badge(text, risk):
+            # 작은 1행 테이블로 배지 스타일 구성
+            bg = {'low': colors.HexColor('#E8F5E9'), 'mid': colors.HexColor('#FFF3E0'), 'high': colors.HexColor('#FFEBEE')}.get(risk, colors.whitesmoke)
+            fg = {'low': colors.HexColor('#1B5E20'), 'mid': colors.HexColor('#E65100'), 'high': colors.HexColor('#B71C1C')}.get(risk, colors.black)
+            t = Table([[Paragraph(text, ParagraphStyle(name='Badge', fontName='NanumGothic-Bold', fontSize=9, textColor=fg))]], colWidths=[45])
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), bg),
+                ('BOX', (0,0), (-1,-1), 0.5, bg),
+                ('INNERPADDING', (0,0), (-1,-1), 3),
+            ]))
+            return t
+
+        def divider():
+            line = Table([['']], colWidths=['*'], rowHeights=[1])
+            line.setStyle(TableStyle([
+                ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E5E7EB')),
+            ]))
+            return line
 
         elements = []
-        for idx, item in enumerate(summary_data, 1):
-            elements.append(Paragraph(f"[{idx}] 조항 요약", styles["CustomTitle"]))
-            elements.append(Paragraph(f"원문: {item.get('sentence', '')}", styles["CustomContent"]))
-            elements.append(Paragraph(f"관련 법령: {item.get('law', '-')}", styles["CustomContent"]))
-            elements.append(Paragraph(f"해설: {item.get('description', '-')}", styles["CustomContent"]))
-            elements.append(Paragraph(f"개선안: {item.get('recommend', '-')}", styles["CustomContent"]))
-            elements.append(Spacer(1, 12))
+        # 문서 제목
+        elements.append(Paragraph(f"{file_name_only} 요약본", styles['H1']))
+        elements.append(divider())
+        elements.append(Spacer(1, 8))
+
+        if highlights:
+            elements.append(Spacer(1, 10))
+            elements.append(Paragraph('핵심 시정 권고', styles['H2']))
+            for h in highlights[:5]:
+                elements.append(Paragraph(f"• {h}", styles['Body']))
+
+        elements.append(Spacer(1, 12))
+        elements.append(divider())
+        elements.append(Spacer(1, 8))
+        elements.append(Paragraph('조항별 분석', styles['H2']))
+
+        # 조항 카드 반복
+        for idx, c in enumerate(clauses, 1):
+            header = Table([[Paragraph(f"[{idx}] {c['title']}", styles['H2']), risk_badge(c['risk'].upper(), c['risk'])]], colWidths=['*', 55])
+            header.setStyle(TableStyle([
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+                ('ALIGN', (1,0), (1,0), 'RIGHT'),
+            ]))
+
+            # 섹션 블록들(원문/법령/해설/개선안)
+            blocks = []
+            blocks.append(Paragraph('원문', styles['Label']))
+            blocks.append(Paragraph(f"\"{c['original']}\"", styles['Body']))
+            blocks.append(Paragraph('관련 법령', styles['Label']))
+            blocks.append(Paragraph(c['law'], styles['Body']))
+            blocks.append(Paragraph('해설', styles['Label']))
+            blocks.append(Paragraph(c['commentary'], styles['Body']))
+            blocks.append(Paragraph('개선안', styles['Label']))
+            blocks.append(Paragraph(c['recommendation'], styles['Body']))
+
+            elements.append(KeepTogether([header] + blocks + [Spacer(1, 10)]))
 
         doc.build(elements)
         buffer.seek(0)
 
-        # Save summary PDF file in memory
-        summary_file_name = f"{file_name_only}_summary.pdf"
+        summary_file_name = f"{file_name_only}_요약본.pdf"
         summary_content = ContentFile(buffer.read(), name=summary_file_name)
 
         # 원본 계약서 PDF 저장
@@ -158,38 +262,37 @@ class DocumentUploadView(APIView):
         return Response({'message': '업로드 성공', 'document_id': document.id}, status=200)
     
 GUIDELINE_PROMPT = """
-당신은 **근로 계약** 전문 변호사입니다. 
+당신은 **근로 계약** 전문 변호사입니다.
 당신의 임무는 제공된 계약서를 기반으로 피계약자가 주의깊게 살펴보아야 할 주요 조항과 독소 조항, 그리고 모호한 표현들을 찾아내는 것입니다.
-청자은 해당 계약서의 피계약자이며, 피계약자는 20살 이상의 성인이지만, 법률에 대한 지식이 계약자보다 상대적으로 부족한 사람입니다.
+청자는 해당 계약서의 피계약자이며, 피계약자는 20살 이상의 성인이지만, 법률에 대한 지식이 계약자보다 상대적으로 부족한 사람입니다.
 
-##규칙
-계약서의 조항은 실제 법률에 근거하여 작성된 계약서의 내용뿐 아니라, 법률에 근거하지 않은 모든 내용을 포함합니다.
-- **주요 조항** : 계약이 성사될 시 피계약자가 가장 중요하게 살펴봐야 하는 조항을 의미합니다.
-- **독소 조항** : 계약이 성사될 시 피계약자에게 불리하게 작용할 수 있거나 법률에 어긋나는 조항을 의미합니다. 
-- **모호한 표현** : 계약 체결 후 피계약자에게 잠재적 피해를 끼칠 수 있는 조항을 의미합니다.
+## 규칙
+계약서의 조항은 실제 법률에 근거한 내용뿐 아니라, 법률에 근거하지 않은 모든 내용을 포함합니다.
+- **주요 조항(main)**: 계약이 성사될 시 피계약자가 가장 중요하게 살펴봐야 하는 조항
+- **독소 조항(toxin)**: 피계약자에게 불리하게 작용할 수 있거나 법률에 어긋나는 조항
+- **모호한 표현(ambi)**: 체결 후 피계약자에게 잠재적 피해를 끼칠 수 있는 모호한 표현
 
-당신은 계약서의 각 문장을 기준으로 가장 유사한 법률 조항을 찾아, 그에 어긋나는 표현이 있는지 파악해야 합니다. 
-계약서의 내용과 법률 조항 간의 맥락을 파악하여 피계약자에게 불리하게 작용할 수 있는 모든 조항을 탐색합니다.
-주요 조항, 독소 조항, 모호한 표현은 모두 법률 데이터를 기반으로, '왜' 중요한지, '왜' 어긋나는지, '왜' 모호한지 피계약자에게 명확하고, 구체적으로 설명해야 합니다.
+당신은 계약서의 각 문장을 기준으로 가장 유사한 법률 조항을 찾아, 그에 어긋나는 표현이 있는지 파악해야 합니다.
+계약서 내용과 법률 조항 간의 맥락을 파악하여 피계약자에게 불리하게 작용할 수 있는 모든 조항을 탐색합니다.
+각 항목은 '왜 중요한지', '왜 어긋나는지', '왜 모호한지'를 법률 데이터에 근거해 명확하고 구체적으로 설명하십시오.
 
-계약서 상의 조건 및 조항을 법률과 비교하여 피계약자에게 불리한 점을 찾지 못했다면, 계약이 체결되어도 무방하다고 할 수 있습니다. 그러나 한 번 더 확인하는 것을 기본으로 합니다.
+## 출력 형식 (반드시 아래 스키마만 따르며, JSON 배열 외 텍스트 금지)
+각 요소는 다음 키를 포함해야 합니다.
+- **sentence**: 계약서 원문 문장
+- **types**: 배열; 'main', 'toxin', 'ambi' 중 1~3개
+- **law**: 가장 유사한 실제 법률 조항 (예: "근로기준법 제50조")
+- **description**: 법률과 계약서 내용의 차이/위험을 설명
+- **recommend**: description을 반영해 수정된 권장 조항을 제시
+- **title**: 조항의 짧은 제목 (예: "근무시간", "계약기간", "해지")
+- **risk**: 'low' | 'mid' | 'high' (피계약자 관점 위험도)
+- **category**: 상위 분류 (예: "근로시간", "휴일", "비밀유지", "계약해지" 등)
 
-## 출력 형식
-출력 형식은 JSON 형태로 각 key는 다음과 같이 구성되어야 합니다. 
-- **sentence**: 주어진 계약서에 작성된 내용을 포함합니다.
-- **types**: 배열 형태를 가지며, 'main'(주요 조항), 'toxin'(독소 조항), 'ambi'(모호한 표현) 중 1~3개를 가질 수 있습니다.
-- **law**: "sentence"와 가장 유사도가 높은 실제 법률 조항을 의미합니다. 이를 출력할 때는 '000법 제00조0'와 같은 형식으로 출력합니다.
-- **description**: "law"의 법률 데이터와 계약서 내용의 차이점을 설명합니다.
-- **recommend**: "law"와 "description"에 따라 수정이 완료된 수정 조항입니다.
-
-답변은 반드시 JSON 형식의 리스트([])로 출력하고, 그 외 불필요한 말이나 설명은 절대 포함하지 마십시오. 
-JSON 형식이 완전히 닫혀야 하며, 누락된 괄호나 따옴표 없이 유효한 형식으로 출력하십시오.
-백틱(```)이나 코드 블록(```json`, `json`, triple backticks 등)을 절대 포함하지 마십시오. 응답은 오직 JSON 배열만 출력하십시오.
+요구사항: 유효한 JSON **배열**로만 답변하십시오. 코드 블록 표기(백틱 등)와 JSON 외 텍스트를 절대 포함하지 마십시오.
 
 ## 질문
-1. 이 계약서의 주요 조항은 모두 무엇입니까? 주요 조항을 찾고 'main' 타입으로 분류하여, 각 조항이 중요한 이유를 설명하십시오.
-2. 이 계약서에서 독소 조항은 모두 무엇입니까? 독소 조항을 찾고 'toxin' 타입으로 분류하여, 각 조항이 피계약자에게 불리한 이유를 설명하십시오.
-3. 이 계약서에서 모호한 표현은 모두 무엇입니까? 모호한 표현을 찾고 'ambi' 타입으로 분류하여, 각 표현이 모호한 이유와 그로 인한 잠재적 피해를 설명하십시오.
+1) 이 계약서의 주요 조항은 무엇입니까? 각각 'main' 타입으로 분류하고, 중요한 이유를 설명하십시오.
+2) 이 계약서의 독소 조항은 무엇입니까? 각각 'toxin' 타입으로 분류하고, 불리한 이유를 설명하십시오.
+3) 이 계약서의 모호한 표현은 무엇입니까? 각각 'ambi' 타입으로 분류하고, 모호한 이유와 잠재적 피해를 설명하십시오.
 
 ## 입력 데이터
 - Context: {{context}}
