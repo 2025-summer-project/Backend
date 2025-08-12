@@ -56,19 +56,33 @@ class Document(models.Model):
 
 # 대화 로그 모델
 class ChatLog(models.Model):
-    document = models.ForeignKey(Document, on_delete=models.CASCADE)  # 어떤 문서에 대한 대화인지
-    user = models.ForeignKey(User, on_delete=models.CASCADE)          # 어떤 사용자의 메시지인지
+    document = models.ForeignKey(Document, on_delete=models.CASCADE)    # 어떤 문서에 대한 대화인지
+    user = models.ForeignKey(User, on_delete=models.CASCADE)            # 어떤 사용자의 메시지인지
 
-    sender = models.CharField(                                       # 누가 보냈는지
+    sender = models.CharField(                                          # 누가 보냈는지
         max_length=10,
         choices=[('ai', 'AI'), ('user', 'User')]
     )
-    message = models.TextField(null=True, blank=True)               # 메시지 내용
-    created_at = models.DateTimeField(auto_now_add=True)            # 대화 시각
+    message = models.TextField(null=True, blank=True)                   # 메시지 내용
+    created_at = models.DateTimeField(auto_now_add=True)                # 대화 시각
 
     def __str__(self):
         return f"{self.sender}: {self.message[:30]}"
     
+class RefreshTokenStoreManager(models.Manager):
+    def prune_expired(self):                                            # 만료 토큰 일괄 삭제
+        return self.filter(expires_at__lt=timezone.now()).delete()
+
+    def replace_for_user(self, user, token, expires_at):                # 사용자 1개 정책: 있으면 갱신, 없으면 생성
+        
+        return self.update_or_create(
+            user=user,
+            defaults={
+                "token": token,
+                "expires_at": expires_at,
+                "revoked": False,
+            }
+        )
 
 class RefreshTokenStore(models.Model): # 어떤 유저의 토큰인지 연결 (1:N 관계)
     user = models.ForeignKey(
@@ -82,17 +96,24 @@ class RefreshTokenStore(models.Model): # 어떤 유저의 토큰인지 연결 (1
     expires_at = models.DateTimeField() # 토큰이 만료되는 시각 (JWT의 exp 클레임과 동일하게 설정)
     revoked = models.BooleanField(default=False,) # 로그아웃 또는 강제 만료 처리된 경우 표시
 
+    objects = RefreshTokenStoreManager()
+
     class Meta:
         # 최근에 발급된 순으로 정렬
         ordering = ['-created_at']
         verbose_name = "Refresh Token 저장소"
         verbose_name_plural = "Refresh Token 저장소 목록"
 
+        constraints = [
+            models.UniqueConstraint(fields=['user'], name='uq_refresh_one_per_user'),
+        ]
+        indexes = [
+            models.Index(fields=['expires_at']), 
+        ]
+
     def is_expired(self):
-        """
-        현재 시간이 만료시간을 지난 경우 True 반환
-        """
-        return timezone.now() >= self.expires_at
+        
+        return timezone.now() >= self.expires_at    # 현재 시간이 만료시간을 지난 경우 True 반환
 
     def __str__(self):
         return f"[{self.user.user_id}] refresh @ {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"

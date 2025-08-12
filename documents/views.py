@@ -1,15 +1,21 @@
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
+from django.http import FileResponse
+
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 
-from core.models import Document
-from documents.serializers import FileNameViewSerializer, FileNameUpdateSerializer, ChatNameViewSerializer, ChatNameUpdateSerializer
-
-# Swagger용 import
 from drf_yasg.utils import swagger_auto_schema
 from drf_yasg import openapi
+
+from core.models import Document
+from documents.serializers import (
+    FileNameViewSerializer,
+    FileNameUpdateSerializer,
+    ChatNameViewSerializer,
+    ChatNameUpdateSerializer,
+)
 
 
 class DocumentListView(APIView):
@@ -93,4 +99,50 @@ class UpdateChatNameView(APIView):
                 "message": "채팅방 이름이 변경되었습니다.",
                 "data": serializer.data
             }, status=200)
-        return Response(serializer.errors, status=400)        
+        return Response(serializer.errors, status=400)    
+
+
+class DocumentPDFView(APIView):
+    permission_classes = [IsAuthenticated]  # JWT 인증 필요
+
+    @swagger_auto_schema(
+        operation_summary="문서 PDF 보기",
+        operation_description="해당 문서의 PDF 파일을 반환합니다 (inline).",
+        
+        responses={200: 'application/pdf'},
+        security=[{"Bearer": []}],
+    )
+    def get(self, request, document_id: int):
+        # 1) 유저 소유 문서만
+        try:
+            doc = Document.objects.get(pk=document_id, user=request.user)
+        except Document.DoesNotExist:
+            return Response({"detail": "문서를 찾을 수 없습니다."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2) PDF 파일 필드 찾기 (모델 필드명에 맞춰 조정)
+        file_field = None
+        for attr in ("pdf_file", "file", "uploaded_file"):
+            if hasattr(doc, attr):
+                file_field = getattr(doc, attr)
+                break
+        if not file_field:
+            return Response({"detail": "PDF 파일 필드가 없습니다."}, status=400)
+        if not file_field:  # 파일이 비어있을 때
+            return Response({"detail": "파일이 존재하지 않습니다."}, status=404)
+
+        # 3) 파일 열기(로컬/스토리지 모두 대응)
+        try:
+            file_field.open('rb')
+            fileobj = file_field.file 
+        except Exception:
+            fileobj = getattr(file_field, 'file', None) or file_field
+
+        # 4) 파일 스트리밍 응답
+        resp = FileResponse(fileobj, content_type='application/pdf')
+
+        # 파일명: 모델에 file_name이 있으면 사용, 아니면 업로드 이름
+        filename = getattr(doc, 'file_name', None) or getattr(file_field, 'name', 'document.pdf')
+        if not str(filename).lower().endswith('.pdf'):
+            filename = f"{filename}.pdf"
+        resp['Content-Disposition'] = f'inline; filename="{filename}"'
+        return resp        
