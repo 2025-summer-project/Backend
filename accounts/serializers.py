@@ -1,8 +1,10 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import datetime, timedelta
+from django.db import transaction, IntegrityError
 from core.models import User, RefreshTokenStore  # core.models에서 User 모델을 가져옴
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from django.conf import settings
 
 # 사용자 회원가입에 사용할 시리얼라이저
 class UserSerializer(serializers.ModelSerializer):
@@ -28,14 +30,13 @@ class UserSerializer(serializers.ModelSerializer):
 # JWT 로그인용 시리얼라이저
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
-
-    username_field = 'user_id'  
+    username_field = 'user_id'
 
     # 요청 받을 필드
     user_id = serializers.CharField(write_only=True)
     password = serializers.CharField(write_only=True)
 
-    # 응답으로 보여줄 필드
+    # 응답 필드
     access = serializers.CharField(read_only=True)
     refresh = serializers.CharField(read_only=True)
     user_name = serializers.CharField(read_only=True)
@@ -45,28 +46,48 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token = super().get_token(user)
         token['user_name'] = user.user_name
         return token
-    
-    def validate(self, attrs):
-        attrs['username'] = attrs.get('user_id') # user_id → username 필드로 변환해서 부모 클래스가 인식
-        data = super().validate(attrs)  # 기본 access/refresh 생성
 
+    @transaction.atomic
+    def validate(self, attrs):
+        attrs['username'] = attrs.get('user_id')
+        data = super().validate(attrs)
+
+        # 새 refresh 생성
         refresh = self.get_token(self.user)
 
-        RefreshTokenStore.objects.filter(user=self.user).delete() # 기존 RefreshToken 제거
+        # 만료 시간 설정 (settings에서 가져오거나 기본 7일)
+        lifetime = getattr(settings, "SIMPLE_JWT", {}).get("REFRESH_TOKEN_LIFETIME", timedelta(days=7))
+        expires = timezone.now() + lifetime
 
-        # DB에 새로운 RefreshToken 저장
-        RefreshTokenStore.objects.create(
-            user=self.user,
-            token=str(refresh),
-            created_at=timezone.now(),
-            expires_at=timezone.now() + timedelta(days=7)  # JWT exp와 맞추기
-        )
+        # 만료 토큰 삭제
+        RefreshTokenStore.objects.filter(
+            user=self.user, expires_at__lt=timezone.now()
+        ).delete()
 
+        # 유저당 1개만 유지
+        try:
+            RefreshTokenStore.objects.update_or_create(
+                user=self.user,
+                defaults={
+                    "token": str(refresh),
+                    "expires_at": expires,
+                    "revoked": False,
+                }
+            )
+        except IntegrityError:
+            RefreshTokenStore.objects.filter(user=self.user).delete()
+            RefreshTokenStore.objects.create(
+                user=self.user,
+                token=str(refresh),
+                expires_at=expires,
+                revoked=False,
+            )
 
-        # 응답에 추가로 user_id와 user_name 포함
+        # 응답 데이터 확장
         data.update({
             "user_id": self.user.user_id,
             "user_name": self.user.user_name,
         })
         return data
-   
+
+    
