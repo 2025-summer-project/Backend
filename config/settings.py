@@ -154,6 +154,7 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'core.User'   # 앱이름.모델이름
 
+
 #test
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
