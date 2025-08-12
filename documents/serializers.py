@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from core.models import Document
+from pathlib import Path
 
 class FileNameViewSerializer(serializers.ModelSerializer):
     class Meta:
@@ -26,8 +27,15 @@ class ChatNameUpdateSerializer(serializers.ModelSerializer):
         model = Document
         fields = ['chat_name']
 
-    def validate_file_name(self, value):
-        if not value.strip():
-            raise serializers.ValidationError("채팅방 이름은 비워둘 수 없습니다.")
-        return value        
-      
+class SummaryFileSerializer(serializers.ModelSerializer):
+
+    summary_file = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Document
+        fields = ['summary_file']       
+
+    def get_summary_file(self, obj):
+        # 예: "summaries/근로계약서_summary.pdf" -> "근로계약서_summary"
+        return Path(obj.summary_file.name).stem
+            
