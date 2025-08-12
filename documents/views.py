@@ -15,10 +15,11 @@ from documents.serializers import (
     FileNameUpdateSerializer,
     ChatNameViewSerializer,
     ChatNameUpdateSerializer,
+    SummaryFileSerializer
 )
 
-
-class DocumentListView(APIView):
+# 문서 목록 조회
+class DocumentListView(APIView): 
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
     @swagger_auto_schema(
@@ -33,8 +34,28 @@ class DocumentListView(APIView):
         documents = Document.objects.filter(user=user)
         serializer = FileNameViewSerializer(documents, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
-    
 
+# 요약된 문서 목록 조회
+class SummaryListView(APIView):
+    permission_classes = [IsAuthenticated]  # JWT 인증 필요
+
+    @swagger_auto_schema(
+        operation_summary="요약된 문서 목록 조회",
+        operation_description="로그인한 유저의 문서에서 summary_file만 반환합니다.",
+        responses={200: SummaryFileSerializer(many=True)},
+        security=[{"Bearer": []}],
+    )
+    def get(self, request):
+        user = request.user
+        documents = (
+            Document.objects
+            .filter(user=user)
+            .order_by('-updated_at', '-created_at')
+        )
+        serializer = SummaryFileSerializer(documents, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    
+# 채팅방 목록 조회
 class ChatListView(APIView):
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
@@ -51,7 +72,8 @@ class ChatListView(APIView):
         serializer = ChatNameViewSerializer(documents, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
     
-    
+
+#문서 목록 이름 변경    
 class UpdateFileNameView(APIView):
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
@@ -77,6 +99,7 @@ class UpdateFileNameView(APIView):
         return Response(serializer.errors, status=400)    
 
 
+# 채팅방 이름 변경
 class UpdateChatNameView(APIView):
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
@@ -102,6 +125,7 @@ class UpdateChatNameView(APIView):
         return Response(serializer.errors, status=400)    
 
 
+# 원본 문서 PDF 조회
 class DocumentPDFView(APIView):
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
