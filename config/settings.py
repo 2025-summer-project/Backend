@@ -154,12 +154,15 @@ SIMPLE_JWT = {
 
 AUTH_USER_MODEL = 'core.User'   # 앱이름.모델이름
 
+#test
 SWAGGER_SETTINGS = {
     'SECURITY_DEFINITIONS': {
         'Bearer': {
             'type': 'apiKey',
-            'name': 'Authorization',
-            'in': 'header'
+            'name': 'Authorization',  # 이게 실제로 헤더에 들어가는 이름
+            'in': 'header',
+            'description': 'JWT 인증을 위한 토큰을 입력하세요. 예: **Bearer &lt;your_access_token&gt;**',
         }
     },
+    'USE_SESSION_AUTH': False,  # 세션 인증 비활성화 (JWT만 쓸 경우)
 }
