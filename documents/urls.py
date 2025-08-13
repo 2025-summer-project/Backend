@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import DocumentListView, UpdateFileNameView, ChatListView, UpdateChatNameView, DocumentPDFView,SummaryListView
+from .views import DocumentListView, UpdateFileNameView, ChatListView, UpdateChatNameView, DocumentPDFView,SummaryListView, SummaryPDFView
 
 urlpatterns = [
     path('document-list', DocumentListView.as_view()),          #get /doc/document-list
@@ -8,4 +8,5 @@ urlpatterns = [
     path('documents/<int:pk>/chat-name/', UpdateChatNameView.as_view(), name='chat-name'),
     path("<int:document_id>/pdf", DocumentPDFView.as_view(), name="document-pdf"),
     path('documents/summaries/', SummaryListView.as_view(), name='summary-list'),
+    path('<int:document_id>/summary/', SummaryPDFView.as_view(), name='contract-summary')
 ]

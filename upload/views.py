@@ -164,8 +164,11 @@ class DocumentUploadView(APIView):
             return Response({'error': 'OpenAI 요약 결과가 유효한 JSON 형식이 아닙니다.'}, status=400)
 
         timestamp = datetime.now().strftime("%Y.%m.%d_%H:%M")
-        filename,  = os.path.splitext(file.name)
-        file_name_only = f"{filename}{timestamp}"
+                # os.path.splitext() → ('이름', '.확장자') 튜플 반환
+        # filename: 확장자 제외한 순수 파일명
+        # ext: .을 포함한 확장자 (예: ".pdf")
+        filename, ext = os.path.splitext(os.path.basename(file.name))
+        file_name_only = f"{filename}_{timestamp}"
 
         # Register fonts
         pdfmetrics.registerFont(TTFont('NanumGothic', 'fonts/NanumGothic-Regular.ttf'))
@@ -174,7 +177,7 @@ class DocumentUploadView(APIView):
 
         # Create PDF from summary JSON
         summary_data = json.loads(summary_text)
-        highlights, clauses = build_summary_context(summary_data)
+        _, highlights, clauses = build_summary_context(summary_data)
 
         buffer = io.BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=A4)
@@ -247,6 +250,13 @@ class DocumentUploadView(APIView):
 
         summary_file_name = f"{file_name_only}_요약본.pdf"
         summary_content = ContentFile(buffer.read(), name=summary_file_name)
+
+        # pdfplumber 등으로 파일을 읽으면, 내부 읽기 위치(pointer)가 파일 끝으로 이동함
+        # seek(0) → 읽기 위치를 처음(0바이트)으로 되돌려서 저장 시 빈 파일이 되지 않도록 함
+        try:
+            file.seek(0)
+        except Exception:
+            pass
 
         # 원본 계약서 PDF 저장
         # 요약본 PDF 저장 (AI 분석 결과)

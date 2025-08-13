@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.http import FileResponse
+from django.http import HttpResponse
 
 from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
@@ -130,7 +131,7 @@ class DocumentPDFView(APIView):
     permission_classes = [IsAuthenticated]  # JWT 인증 필요
 
     @swagger_auto_schema(
-        operation_summary="문서 PDF 보기",
+        operation_summary="문서 PDF 조회",
         operation_description="해당 문서의 PDF 파일을 반환합니다 (inline).",
         
         responses={200: 'application/pdf'},
@@ -170,3 +171,36 @@ class DocumentPDFView(APIView):
             filename = f"{filename}.pdf"
         resp['Content-Disposition'] = f'inline; filename="{filename}"'
         return resp        
+
+# 요약본 PDF 조회
+class SummaryPDFView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @swagger_auto_schema(
+        operation_summary="요약본 PDF 조회",
+        responses={
+            200: openapi.Response(
+                description="PDF 파일 반환",
+                schema=openapi.Schema(type=openapi.TYPE_STRING, format='binary')
+            ),
+            404: openapi.Response(description="문서 없음"),
+            401: openapi.Response(description="인증 실패 또는 토큰 만료")
+        }
+    )
+    def get(self, request, document_id):
+        try:
+            document = Document.objects.get(id=document_id, user=request.user)
+        except Document.DoesNotExist:
+            return Response({"error": "해당 문서를 찾을 수 없습니다."}, status=404)
+
+        if not document.summary_file:
+            return Response({"error": "요약 PDF 파일이 존재하지 않습니다."}, status=404)
+
+        try:
+            with document.summary_file.open("rb") as pdf_file:
+                response = HttpResponse(pdf_file.read(), content_type="application/pdf")
+                filename = f"{document.file_name}_요약본.pdf"
+                response["Content-Disposition"] = f'attachment; filename="{filename}"'
+                return response
+        except Exception as e:
+            return Response({"error": f"PDF 파일을 읽는 도중 오류가 발생했습니다: {str(e)}"}, status=500)
