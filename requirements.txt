@@ -12,3 +12,4 @@ openai>=1.0.0
 requests
 reportlab>=4.0.0
 django-mysql
+django-cors-headers==4.3.1

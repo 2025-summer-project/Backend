@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    "corsheaders",
     'test',
     'drf_yasg',
     'rest_framework', 
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -167,3 +169,6 @@ SWAGGER_SETTINGS = {
     },
     'USE_SESSION_AUTH': False,  # 세션 인증 비활성화 (JWT만 쓸 경우)
 }
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",   # Vite 개발 서버
+]
